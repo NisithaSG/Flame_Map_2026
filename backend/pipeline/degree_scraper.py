@@ -57,7 +57,7 @@ for degree in degree_urls:
         for course in courses:
             row = course.find_parent("tr")
             tds = row.find_all("td")
-            degree_courses.append(course["title"])
+            degree_courses.append(course["title"].replace("\u00a0", " "))
 
         sections[section_id] = {
             "section_name": section_name,
@@ -77,7 +77,7 @@ for degree in degree_urls:
 with open("degrees.json", "w") as f:
     json.dump(degree_option_list, f, indent=2)
 
-print(f"Done {len(degree_option_list)} courses saved.")
+print(f"Done {len(degree_option_list)} degrees saved.")
 
 
         

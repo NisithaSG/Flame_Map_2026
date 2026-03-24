@@ -1,2 +1,7 @@
+flamemap.db
 courses.json
 degrees.json
+__pycache__/
+.env
+node_modules/
+.venv/

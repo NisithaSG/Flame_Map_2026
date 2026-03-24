@@ -146,13 +146,13 @@ for subject in subjects:
         title = courseblock.find("p", class_="courseblocktitle").text.strip()
         # "RES 450.  Real Estate Data Analysis.  3 or 4 hours. This format means that we haveto split the sentence by the period to get the individual information
         parts = title.split(".")  #split into list of strings divided by period
-        course_id = parts[0].strip()   # "RES 450"
+        course_id = parts[0].strip().replace("\u00a0", " ")   # "RES 450"
         name = parts[1].strip() # "Real Estate Data Analysis"
         hours = parts[2].strip().replace("hours", "").strip() # "3 or 4"
         
         desc = courseblock.find("p", class_="courseblockdesc").text.strip()
         prereqs = desc.split("Prerequisite(s):")[1].strip() if "Prerequisite(s):" in desc else ""  #Prerequisites are in description so split where found
-        
+        prereqs = prereqs.replace("\u00a0", " ")
 
         coursesList[course_id] = {
             "name" : name,
