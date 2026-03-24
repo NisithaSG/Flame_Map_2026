@@ -1,7 +1,30 @@
+# generated data files
 flamemap.db
 courses.json
 degrees.json
+
+# python
 __pycache__/
+*.py[cod]
 .env
-node_modules/
+*.egg-info/
+
+# virtual environments
 .venv/
+venv/
+
+# node
+node_modules/
+dist/
+.next/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# testing files
+testing.html
+githubsetup.txt
