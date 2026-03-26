@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import * as d3 from 'd3'
+import * as dagre from 'dagre'
 import './index.css'
+
+type GraphNode = d3.SimulationNodeDatum & { id: string }
+type GraphLink = { source: string; target: string }
 
 export default function App() {
   const [majors, setMajors] = useState<
@@ -21,6 +25,8 @@ export default function App() {
   const [graphLoading, setGraphLoading] = useState(false)
   const [graphError, setGraphError] = useState('')
   const [showGraph, setShowGraph] = useState(false)
+  const [layoutMode, setLayoutMode] = useState<'flow' | 'force'>('flow')
+  const [zoomScale, setZoomScale] = useState(1.3)
   const graphRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -176,21 +182,33 @@ export default function App() {
     container.innerHTML = ''
     const width = container.clientWidth || 900
     const height = 560
+    const padding = 24
+    const nodeRadius = 12
+    const labelOffset = 18
+    const labelWidth = 48
+    const minX = padding + nodeRadius
+    const maxX = width - padding - nodeRadius - labelOffset - labelWidth
+    const minY = padding + nodeRadius
+    const maxY = height - padding - nodeRadius
 
-    const nodeMap = new Map<string, { id: string }>()
+    const nodeMap = new Map<string, GraphNode>()
+    const courseInfo = new Map<string, { hours?: string; name?: string }>()
     graphData.nodes.forEach((node) => {
       if (!nodeMap.has(node.id)) nodeMap.set(node.id, { id: node.id })
+      if (!courseInfo.has(node.id)) {
+        courseInfo.set(node.id, { hours: node.hours, name: node.name })
+      }
     })
     const nodes = Array.from(nodeMap.values())
     const nodeIds = new Set(nodes.map((node) => node.id))
-    const links = graphData.edges
+    const links: GraphLink[] = graphData.edges
       .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
       .map((edge) => ({ source: edge.source, target: edge.target }))
 
     const svg = d3
       .select(container)
       .append('svg')
-      .attr('width', '100%')
+      .attr('width', width)
       .attr('height', height)
       .attr('viewBox', `0 0 ${width} ${height}`)
       .attr('preserveAspectRatio', 'xMidYMid meet')
@@ -209,10 +227,145 @@ export default function App() {
       .attr('d', 'M0,-5L10,0L0,5')
       .attr('fill', '#4b5563')
 
-    const link = svg
+    const clipRect = svg
+      .append('defs')
+      .append('clipPath')
+      .attr('id', 'graph-clip')
+      .append('rect')
+      .attr('x', padding)
+      .attr('y', padding)
+      .attr('width', width - padding * 2)
+      .attr('height', height - padding * 2)
+
+    const viewport = svg
+      .append('g')
+      .attr('clip-path', 'url(#graph-clip)')
+
+    const linkGroup = viewport
       .append('g')
       .attr('stroke', '#4b5563')
       .attr('stroke-opacity', 0.6)
+      .attr('fill', 'none')
+
+    if (layoutMode === 'flow') {
+      const parseLevel = (id: string) => {
+        const match = id.match(/(\d{3})/)
+        if (!match) return 0
+        const num = Number(match[1])
+        if (Number.isNaN(num)) return 0
+        return Math.floor(num / 100) * 100
+      }
+
+      const graph = new dagre.graphlib.Graph()
+      graph.setGraph({
+        rankdir: 'TB',
+        ranksep: 120,
+        nodesep: 36,
+        marginx: padding,
+        marginy: padding,
+      })
+      graph.setDefaultEdgeLabel(() => ({}))
+
+      nodes.forEach((node) => {
+        const rank = parseLevel(node.id)
+        graph.setNode(node.id, { width: 60, height: 30, rank })
+      })
+
+      links.forEach((edge) => {
+        graph.setEdge(edge.source as string, edge.target as string)
+      })
+
+      dagre.layout(graph)
+
+      const graphWidth = graph.graph().width ?? width
+      const graphHeight = graph.graph().height ?? height
+      const baseScale =
+        Math.min(
+          (width - padding * 2) / graphWidth,
+          (height - padding * 2) / graphHeight
+        ) * 0.98
+      const totalScale = baseScale * zoomScale
+      const scaledWidth = graphWidth * totalScale + padding * 2
+      const scaledHeight = graphHeight * totalScale + padding * 2
+      const canvasWidth = Math.max(width, scaledWidth)
+      const canvasHeight = Math.max(height, scaledHeight)
+
+      svg
+        .attr('width', canvasWidth)
+        .attr('height', canvasHeight)
+        .attr('viewBox', `0 0 ${canvasWidth} ${canvasHeight}`)
+
+      clipRect
+        .attr('width', canvasWidth - padding * 2)
+        .attr('height', canvasHeight - padding * 2)
+
+      const offsetX = padding
+      const offsetY = padding
+
+      const flowRoot = viewport
+        .append('g')
+        .attr('transform', `translate(${offsetX}, ${offsetY}) scale(${totalScale})`)
+
+      const edgePath = flowRoot
+        .append('g')
+        .attr('stroke', '#4b5563')
+        .attr('stroke-opacity', 0.6)
+        .attr('fill', 'none')
+        .selectAll('path')
+        .data(links)
+        .enter()
+        .append('path')
+        .attr('stroke-width', 1.2)
+        .attr('marker-end', 'url(#arrow)')
+        .attr('d', (d: GraphLink) => {
+          const edge = graph.edge(d.source as string, d.target as string)
+          if (!edge || !edge.points) return ''
+          const line = d3.line<[number, number]>().curve(d3.curveMonotoneY)
+          const points = (edge.points as Array<{ x: number; y: number }>).map(
+            (point) => [point.x, point.y] as [number, number]
+          )
+          return line(points) || ''
+        })
+
+      const flowNodes = flowRoot
+        .append('g')
+        .selectAll('g')
+        .data(nodes)
+        .enter()
+        .append('g')
+        .attr('transform', (d: GraphNode) => {
+          const dagNode = graph.node(d.id)
+          return dagNode ? `translate(${dagNode.x}, ${dagNode.y})` : ''
+        })
+
+      flowNodes
+        .append('circle')
+        .attr('r', nodeRadius)
+        .attr('fill', '#c8102e')
+
+      flowNodes
+        .append('text')
+        .text((d: GraphNode) => d.id)
+        .attr('x', 18)
+        .attr('y', 4)
+        .attr('font-size', '10px')
+        .attr('fill', '#0f172a')
+
+      flowNodes
+        .append('title')
+        .text((d: GraphNode) => {
+          const info = courseInfo.get(d.id)
+          const name = info?.name ? ` — ${info.name}` : ''
+          const hours = info?.hours ? ` — ${info.hours} credits` : ''
+          return `${d.id}${name}${hours}`
+        })
+
+      return () => {
+        edgePath.remove()
+      }
+    }
+
+    const link = linkGroup
       .selectAll('line')
       .data(links)
       .enter()
@@ -220,74 +373,95 @@ export default function App() {
       .attr('stroke-width', 1.2)
       .attr('marker-end', 'url(#arrow)')
 
-    const node = svg
+    const node = viewport
       .append('g')
       .selectAll('g')
       .data(nodes)
       .enter()
       .append('g')
-      .call(
-        d3
-          .drag<SVGGElement, { id: string }>()
-          .on('start', (event) => {
-            if (!event.active) simulation.alphaTarget(0.3).restart()
-            event.subject.fx = event.subject.x
-            event.subject.fy = event.subject.y
-          })
-          .on('drag', (event) => {
-            event.subject.fx = event.x
-            event.subject.fy = event.y
-          })
-          .on('end', (event) => {
-            if (!event.active) simulation.alphaTarget(0)
-            event.subject.fx = null
-            event.subject.fy = null
-          })
-      )
 
     node
       .append('circle')
-      .attr('r', 12)
+      .attr('r', nodeRadius)
       .attr('fill', '#c8102e')
 
     node
       .append('text')
-      .text((d) => d.id)
+      .text((d: GraphNode) => d.id)
       .attr('x', 18)
       .attr('y', 4)
       .attr('font-size', '10px')
       .attr('fill', '#0f172a')
 
+    node
+      .append('title')
+      .text((d: GraphNode) => {
+        const info = courseInfo.get(d.id)
+        const name = info?.name ? ` — ${info.name}` : ''
+        const hours = info?.hours ? ` — ${info.hours} credits` : ''
+        return `${d.id}${name}${hours}`
+      })
+
+    const collisionRadius = 34
     const simulation = d3
-      .forceSimulation(nodes as d3.SimulationNodeDatum[])
+      .forceSimulation(nodes as GraphNode[])
       .force(
         'link',
         d3
-          .forceLink(links)
-          .id((d) => (d as { id: string }).id)
+          .forceLink<GraphNode, GraphLink>(links)
+          .id((d: GraphNode) => d.id)
           .distance(110)
       )
-      .force('charge', d3.forceManyBody().strength(-220))
+      .force('charge', d3.forceManyBody().strength(-260))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collide', d3.forceCollide(26))
+      .force('collide', d3.forceCollide(collisionRadius))
+
+    node.call(
+      d3
+        .drag<SVGGElement, GraphNode>()
+        .on('start', (event: d3.D3DragEvent<SVGGElement, GraphNode, GraphNode>) => {
+          if (!event.active) simulation.alphaTarget(0.3).restart()
+          event.subject.fx = event.subject.x
+          event.subject.fy = event.subject.y
+        })
+        .on('drag', (event: d3.D3DragEvent<SVGGElement, GraphNode, GraphNode>) => {
+          const clampedX = Math.max(minX, Math.min(maxX, event.x))
+          const clampedY = Math.max(minY, Math.min(maxY, event.y))
+          event.subject.fx = clampedX
+          event.subject.fy = clampedY
+        })
+        .on('end', (event: d3.D3DragEvent<SVGGElement, GraphNode, GraphNode>) => {
+          if (!event.active) simulation.alphaTarget(0)
+          event.subject.fx = null
+          event.subject.fy = null
+        })
+    )
+
+    const clamp = (value: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, value))
 
     simulation.on('tick', () => {
+      nodes.forEach((d) => {
+        d.x = clamp(d.x ?? width / 2, minX, maxX)
+        d.y = clamp(d.y ?? height / 2, minY, maxY)
+      })
+
       link
-        .attr('x1', (d) => (d.source as { x: number }).x)
-        .attr('y1', (d) => (d.source as { y: number }).y)
-        .attr('x2', (d) => (d.target as { x: number }).x)
-        .attr('y2', (d) => (d.target as { y: number }).y)
+        .attr('x1', (d: d3.SimulationLinkDatum<GraphNode>) => (d.source as GraphNode).x ?? 0)
+        .attr('y1', (d: d3.SimulationLinkDatum<GraphNode>) => (d.source as GraphNode).y ?? 0)
+        .attr('x2', (d: d3.SimulationLinkDatum<GraphNode>) => (d.target as GraphNode).x ?? 0)
+        .attr('y2', (d: d3.SimulationLinkDatum<GraphNode>) => (d.target as GraphNode).y ?? 0)
 
       node.attr(
         'transform',
-        (d) => `translate(${(d as { x: number }).x}, ${(d as { y: number }).y})`
+        (d: GraphNode) => `translate(${d.x ?? 0}, ${d.y ?? 0})`
       )
     })
 
     return () => {
       simulation.stop()
     }
-  }, [graphData])
+  }, [graphData, layoutMode, zoomScale])
 
   return (
     <main className="page">
@@ -402,6 +576,41 @@ export default function App() {
               <p className="section__lead">
                 Drag nodes to explore the prerequisite flow.
               </p>
+            </div>
+
+            <div className="graph-controls">
+              <button
+                className={`btn btn--ghost${layoutMode === 'flow' ? ' is-active' : ''}`}
+                type="button"
+                onClick={() => setLayoutMode('flow')}
+              >
+                Flowchart Layout
+              </button>
+              <button
+                className={`btn btn--ghost${layoutMode === 'force' ? ' is-active' : ''}`}
+                type="button"
+                onClick={() => setLayoutMode('force')}
+              >
+                Force Layout
+              </button>
+              {layoutMode === 'flow' && (
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => setZoomScale((prev) => Math.min(2, prev + 0.2))}
+                >
+                  Zoom In
+                </button>
+              )}
+              {layoutMode === 'flow' && zoomScale > 1 && (
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => setZoomScale((prev) => Math.max(1, prev - 0.2))}
+                >
+                  Zoom Out
+                </button>
+              )}
             </div>
 
             <div className="graph-card">
