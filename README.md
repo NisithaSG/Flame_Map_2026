@@ -8,10 +8,43 @@ FlameMap lets you pick a major and see a visual map of every course you need to 
 
 ## Project Structure
 
-- backend/
-- backend/pipeline/ - course and degree scrapers, prereq parser, seed script
-- backend/routers/ - API routes for degrees, courses, and graphs
-- frontend/ - React + Vite UI with D3 and Dagre rendering
+```
+.
+├── backend/
+│   ├── pipeline/
+│   │   ├── course_scraper.py
+│   │   ├── courses.json
+│   │   ├── degree_scraper.py
+│   │   ├── degrees.json
+│   │   ├── flamemap.db
+│   │   ├── parser.py
+│   │   └── seed.py
+│   ├── routers/
+│   │   ├── courses.py
+│   │   ├── degrees.py
+│   │   └── graph.py
+│   ├── database.py
+│   ├── main.py
+│   ├── models.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── hooks/
+│   │   │   └── useGraph.js
+│   │   ├── types/
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   └── vite-env.d.ts
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── README.md
+└── .gitignore
+```
 
 ## Stack
 
