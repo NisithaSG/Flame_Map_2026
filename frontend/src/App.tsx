@@ -7,6 +7,14 @@ import './index.css'
 type GraphNode = d3.SimulationNodeDatum & { id: string }
 type GraphLink = { source: string; target: string }
 
+const API_BASE = (() => {
+  const raw = import.meta.env.VITE_API_BASE_URL as string | undefined
+  if (raw && raw.trim().length > 0) return raw.replace(/\/+$/, '')
+  return 'http://localhost:8000'
+})()
+
+const apiUrl = (path: string) => `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`
+
 type CourseNode = {
   id: string
   name?: string
@@ -129,7 +137,7 @@ function PathView({
     setLoadingId(courseId)
     try {
       const encoded = encodeURIComponent(courseId)
-      const res = await fetch(`http://localhost:8000/courses/${encoded}`)
+      const res = await fetch(apiUrl(`/courses/${encoded}`))
       if (!res.ok) throw new Error('not found')
       const data = (await res.json()) as CourseDetail
       setSelected(data)
@@ -277,7 +285,7 @@ export default function App() {
   const fetchDetail = async (courseId: string) => {
     try {
       const encoded = encodeURIComponent(courseId)
-      const res = await fetch(`http://localhost:8000/courses/${encoded}`)
+      const res = await fetch(apiUrl(`/courses/${encoded}`))
       if (!res.ok) throw new Error('not found')
       const data = (await res.json()) as CourseDetail
       setRadialSelected(data)
@@ -295,7 +303,7 @@ export default function App() {
   useEffect(() => {
     const loadMajors = async () => {
       try {
-        const response = await fetch('http://localhost:8000/degrees')
+        const response = await fetch(apiUrl('/degrees'))
         if (!response.ok) throw new Error(`Failed to load majors: ${response.status}`)
         const data = (await response.json()) as Array<{ name: string; degree_id: string }>
         const list = data
@@ -365,7 +373,7 @@ export default function App() {
       setShowGraph(true)
       setRadialSelected(null)
       setTimeout(() => document.getElementById('map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
-      const response = await fetch(`http://localhost:8000/degrees/${degreeId}/graph`)
+      const response = await fetch(apiUrl(`/degrees/${degreeId}/graph`))
       if (!response.ok) throw new Error(`Graph request failed: ${response.status}`)
       const data = (await response.json()) as { degree_id: string; nodes: CourseNode[]; edges: Array<{ source: string; target: string }> }
       setGraphData(data)
