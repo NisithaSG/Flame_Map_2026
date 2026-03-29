@@ -1,0 +1,2 @@
+src/App.tsx(2,21): error TS7016: Could not find a declaration file for module 'd3'. 'C:/Users/nisit/quantum_sprint_2026/frontend/node_modules/d3/src/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/d3` if it exists or add a new declaration (.d.ts) file containing `declare module 'd3';`
