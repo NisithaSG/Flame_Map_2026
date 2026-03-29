@@ -71,10 +71,7 @@ function computeRadialLayout(
     }
   })
 
-  const maxLayer = Math.max(...Array.from(layer.values()), 0)
-  const svgSize = (maxLayer + 1) * RADIUS_STEP * 2 + 200
-
-  return { positions, filteredEdges, svgSize, layerGroups }
+  return { positions, filteredEdges, layerGroups }
 }
 
 export function RadialView({
@@ -108,7 +105,7 @@ export function RadialView({
   const cx = dims.w / 2
   const cy = dims.h / 2
 
-  const { positions, filteredEdges, svgSize } = useMemo(
+  const { positions, filteredEdges } = useMemo(
     () => computeRadialLayout(nodes, edges, cx, cy),
     [nodes, edges, cx, cy]
   )

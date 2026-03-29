@@ -29,13 +29,11 @@ function PathView({
   edges,
   completed,
   onToggle,
-  onSelectCourse,
 }: {
   nodes: CourseNode[]
   edges: Array<{ source: string; target: string }>
   completed: Set<string>
   onToggle: (id: string) => void
-  onSelectCourse: (id: string) => void
 }) {
   const [selected, setSelected] = useState<CourseDetail | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -477,7 +475,13 @@ export default function App() {
       return
     }
 
-    const link = linkGroup.selectAll('line').data(links).enter().append('line').attr('stroke-width', 1.2).attr('marker-end', 'url(#arrow)')
+    const link = linkGroup
+      .selectAll<SVGLineElement, d3.SimulationLinkDatum<GraphNode>>('line')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('stroke-width', 1.2)
+      .attr('marker-end', 'url(#arrow)')
     const node = viewport.append('g').selectAll('g').data(nodes).enter().append('g')
 
     node.append('circle').attr('r', nodeRadius).attr('fill', (d: GraphNode) => completed.has(d.id) ? '#16a34a' : '#c8102e')
@@ -500,11 +504,14 @@ export default function App() {
     )
 
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+    const resolveNode = (value: GraphNode | string) =>
+      typeof value === 'string' ? nodeMap.get(value) ?? null : value
+
     simulation.on('tick', () => {
       nodes.forEach((d) => { d.x = clamp(d.x ?? width / 2, minX, maxX); d.y = clamp(d.y ?? height / 2, minY, maxY) })
       link
-        .attr('x1', (d) => (d.source as GraphNode).x ?? 0).attr('y1', (d) => (d.source as GraphNode).y ?? 0)
-        .attr('x2', (d) => (d.target as GraphNode).x ?? 0).attr('y2', (d) => (d.target as GraphNode).y ?? 0)
+        .attr('x1', (d) => resolveNode(d.source)?.x ?? 0).attr('y1', (d) => resolveNode(d.source)?.y ?? 0)
+        .attr('x2', (d) => resolveNode(d.target)?.x ?? 0).attr('y2', (d) => resolveNode(d.target)?.y ?? 0)
       node.attr('transform', (d: GraphNode) => `translate(${d.x ?? 0}, ${d.y ?? 0})`)
     })
     return () => { simulation.stop() }
@@ -641,7 +648,6 @@ export default function App() {
                       edges={graphData.edges}
                       completed={completed}
                       onToggle={toggleCompleted}
-                      onSelectCourse={fetchDetail}
                     />
                   )}
                   {activeView === 'radial' && (
