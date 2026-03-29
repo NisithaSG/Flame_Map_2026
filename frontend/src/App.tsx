@@ -366,7 +366,7 @@ export default function App() {
     }
 
     const link = linkGroup
-      .selectAll('line')
+      .selectAll<SVGLineElement, d3.SimulationLinkDatum<GraphNode>>('line')
       .data(links)
       .enter()
       .append('line')
@@ -440,6 +440,9 @@ export default function App() {
     const clamp = (value: number, min: number, max: number) =>
       Math.max(min, Math.min(max, value))
 
+    const resolveNode = (value: GraphNode | string) =>
+      typeof value === 'string' ? nodeMap.get(value) ?? null : value
+
     simulation.on('tick', () => {
       nodes.forEach((d) => {
         d.x = clamp(d.x ?? width / 2, minX, maxX)
@@ -447,10 +450,10 @@ export default function App() {
       })
 
       link
-        .attr('x1', (d: d3.SimulationLinkDatum<GraphNode>) => (d.source as GraphNode).x ?? 0)
-        .attr('y1', (d: d3.SimulationLinkDatum<GraphNode>) => (d.source as GraphNode).y ?? 0)
-        .attr('x2', (d: d3.SimulationLinkDatum<GraphNode>) => (d.target as GraphNode).x ?? 0)
-        .attr('y2', (d: d3.SimulationLinkDatum<GraphNode>) => (d.target as GraphNode).y ?? 0)
+        .attr('x1', (d) => resolveNode(d.source)?.x ?? 0)
+        .attr('y1', (d) => resolveNode(d.source)?.y ?? 0)
+        .attr('x2', (d) => resolveNode(d.target)?.x ?? 0)
+        .attr('y2', (d) => resolveNode(d.target)?.y ?? 0)
 
       node.attr(
         'transform',
