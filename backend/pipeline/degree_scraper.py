@@ -26,7 +26,7 @@ for degree in degree_urls:
     degree_soup = BeautifulSoup(degree_page.content, "html.parser")
     
     sections = {} #sections
-    name = degree_soup.find("h1").text.strip()   #name 
+    name = degree_soup.find("h1", class_="page-title").text.strip()   #name 
     degree_id = url.rstrip("/").split("/colleges-depts/")[-1].replace("/", "-")  #degree ID
 
     print(f"Scraping {degree_id}")
