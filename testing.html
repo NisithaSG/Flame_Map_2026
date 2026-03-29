@@ -1,47 +1,577 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>FlameMap Test</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
-    <style>
-        #cy {
-            width: 100%;
-            height: 100vh;
-            background: #1a1a1a;
-        }
-    </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FlameMap — UIC Course Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --flame: #E8593C;
+    --flame-dim: #c44a2f;
+    --flame-glow: rgba(232, 89, 60, 0.15);
+    --bg: #0d0d0d;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --border: rgba(255,255,255,0.07);
+    --text: #f0ede8;
+    --muted: #6b6860;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    white-space: nowrap;
+  }
+
+  .logo-flame {
+    width: 28px;
+    height: 28px;
+    background: var(--flame);
+    clip-path: polygon(50% 0%, 80% 30%, 100% 60%, 75% 100%, 25% 100%, 0% 60%, 20% 30%);
+    animation: flicker 3s ease-in-out infinite;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; transform: scaleY(1); }
+    50% { opacity: 0.85; transform: scaleY(0.96); }
+  }
+
+  .search-wrap {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+
+  .search-wrap input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-wrap input:focus {
+    border-color: var(--flame);
+  }
+
+  .search-wrap input::placeholder { color: var(--muted); }
+
+  .dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+  }
+
+  .dropdown.open { display: block; }
+
+  .dropdown-item {
+    padding: 10px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    line-height: 1.4;
+  }
+
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:hover { background: var(--flame-glow); color: var(--flame); }
+
+  .degree-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    display: block;
+    margin-top: 2px;
+  }
+
+  /* STATS BAR */
+  .stats {
+    display: flex;
+    gap: 24px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .stat span {
+    color: var(--flame);
+    font-weight: 500;
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* GRAPH */
+  #cy {
+    flex: 1;
+    width: 100%;
+  }
+
+  /* SPLASH */
+  #splash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  #splash .big {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    color: rgba(255,255,255,0.06);
+  }
+
+  #splash .hint {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  /* COURSE PANEL */
+  #panel {
+    position: absolute;
+    right: 20px;
+    top: 80px;
+    width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: none;
+    z-index: 50;
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  #panel.open { display: block; }
+
+  .panel-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--flame);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .panel-name {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 12px;
+  }
+
+  .panel-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-row:last-child { border-bottom: none; }
+  .panel-row span { color: var(--text); }
+
+  .panel-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px;
+  }
+
+  .panel-close:hover { color: var(--text); }
+
+  /* LOADING */
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    background: var(--bg);
+    z-index: 20;
+  }
+
+  #loading.show { display: flex; }
+
+  .loader {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--flame);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* SCROLLBAR */
+  .dropdown::-webkit-scrollbar { width: 4px; }
+  .dropdown::-webkit-scrollbar-track { background: transparent; }
+  .dropdown::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
 </head>
 <body>
-    <div id="cy"></div>
-    <script>
-        fetch("http://localhost:8000/degrees/engineering-cs-bs-cs/graph")
-            .then(res => res.json())
-            .then(data => {
-                const nodeIds = new Set(data.nodes.map(n => n.id))
 
-                const seen = new Set()
-                const nodes = data.nodes
-                    .filter(n => {
-                        if (seen.has(n.id)) return false
-                        seen.add(n.id)
-                        return true
-                    })
-                    .map(n => ({ data: { id: n.id, label: n.id } }))
+<header>
+  <div class="logo">
+    <div class="logo-flame"></div>
+    FlameMap
+  </div>
 
-                const edges = data.edges
-                    .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
-                    .map(e => ({ data: { source: e.source, target: e.target } }))
+  <div class="search-wrap">
+    <input type="text" id="search" placeholder="Search a major — e.g. Computer Science..." autocomplete="off"/>
+    <div class="dropdown" id="dropdown"></div>
+  </div>
 
-                cytoscape({
-                    container: document.getElementById("cy"),
-                    elements: [...nodes, ...edges],
-                    style: [
-                        { selector: "node", style: { "label": "data(label)", "color": "#fff", "background-color": "#E8593C", "font-size": "10px" } },
-                        { selector: "edge", style: { "line-color": "#555", "target-arrow-color": "#555", "target-arrow-shape": "triangle", "curve-style": "bezier" } }
-                    ],
-                    layout: { name: "breadthfirst", directed: true, padding: 20 }
-                })
-            })
-    </script>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#E8593C"></div>
+      required
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#3B8BD4"></div>
+      elective
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#1D9E75"></div>
+      concentration
+    </div>
+  </div>
+
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat">nodes <span id="stat-nodes">0</span></div>
+    <div class="stat">edges <span id="stat-edges">0</span></div>
+  </div>
+</header>
+
+<div id="cy"></div>
+
+<div id="splash">
+  <div class="big">FLAMEMAP</div>
+  <div class="hint">search a major above to visualize your path</div>
+</div>
+
+<div id="loading">
+  <div class="loader"></div>
+  <div class="loading-text">building graph...</div>
+</div>
+
+<div id="panel">
+  <button class="panel-close" onclick="closePanel()">✕</button>
+  <div class="panel-id" id="panel-id"></div>
+  <div class="panel-name" id="panel-name"></div>
+  <div class="panel-row">hours <span id="panel-hours"></span></div>
+  <div class="panel-row">section <span id="panel-section"></span></div>
+  <div class="panel-row">prereqs <span id="panel-prereqs"></span></div>
+</div>
+
+<script>
+const API = "http://localhost:8000"
+let cy = null
+let allDegrees = []
+
+// section color mapping
+function sectionColor(sectionName) {
+  const s = (sectionName || "").toLowerCase()
+  if (s.includes("elective")) return "#3B8BD4"
+  if (s.includes("concentration")) return "#1D9E75"
+  if (s.includes("general") || s.includes("education")) return "#888780"
+  return "#E8593C"
+}
+
+// load all degrees for search
+fetch(`${API}/degrees`)
+  .then(r => r.json())
+  .then(data => {
+    allDegrees = data
+  })
+  .catch(() => console.warn("API not reachable"))
+
+// search logic
+const searchEl = document.getElementById("search")
+const dropdownEl = document.getElementById("dropdown")
+
+searchEl.addEventListener("input", () => {
+  const q = searchEl.value.trim().toLowerCase()
+  if (!q || q.length < 2) { dropdownEl.classList.remove("open"); return }
+
+  const matches = allDegrees
+    .filter(d => d.name.toLowerCase().includes(q))
+    .slice(0, 12)
+
+  if (!matches.length) { dropdownEl.classList.remove("open"); return }
+
+  dropdownEl.innerHTML = matches.map(d => `
+    <div class="dropdown-item" onclick="loadDegree('${d.degree_id}', '${d.name.replace(/'/g,"\\'")}')">
+      ${d.name}
+      <span class="degree-badge">${d.college} · ${d.type_of_degree}</span>
+    </div>
+  `).join("")
+  dropdownEl.classList.add("open")
+})
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".search-wrap")) dropdownEl.classList.remove("open")
+})
+
+// load and render a degree graph
+function loadDegree(degreeId, degreeName) {
+  dropdownEl.classList.remove("open")
+  searchEl.value = degreeName
+  closePanel()
+
+  document.getElementById("splash").style.display = "none"
+  document.getElementById("loading").classList.add("show")
+  document.getElementById("stats").style.display = "none"
+
+  fetch(`${API}/degrees/${degreeId}/graph`)
+    .then(r => r.json())
+    .then(data => {
+      const nodeIds = new Set(data.nodes.map(n => n.id))
+
+      const seen = new Set()
+      const nodes = data.nodes
+        .filter(n => { if (seen.has(n.id)) return false; seen.add(n.id); return true })
+        .map(n => ({
+          data: {
+            id: n.id,
+            label: n.id,
+            name: n.name,
+            hours: n.hours,
+            section: n.section,
+            color: sectionColor(n.section)
+          }
+        }))
+
+      const edges = data.edges
+        .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+        .map(e => ({ data: { source: e.source, target: e.target } }))
+
+      document.getElementById("stat-nodes").textContent = nodes.length
+      document.getElementById("stat-edges").textContent = edges.length
+      document.getElementById("stats").style.display = "flex"
+
+      renderGraph(nodes, edges)
+    })
+    .finally(() => {
+      document.getElementById("loading").classList.remove("show")
+    })
+}
+
+function renderGraph(nodes, edges) {
+  if (cy) cy.destroy()
+
+  cy = cytoscape({
+    container: document.getElementById("cy"),
+    elements: [...nodes, ...edges],
+    style: [
+      {
+        selector: "node",
+        style: {
+          "label": "data(label)",
+          "background-color": "data(color)",
+          "color": "#fff",
+          "font-family": "DM Mono, monospace",
+          "font-size": "9px",
+          "font-weight": "500",
+          "text-valign": "center",
+          "text-halign": "center",
+          "width": 52,
+          "height": 52,
+          "border-width": 0,
+          "text-wrap": "wrap",
+          "text-max-width": "48px",
+          "transition-property": "background-color, border-width, border-color",
+          "transition-duration": "0.15s"
+        }
+      },
+      {
+        selector: "node:hover",
+        style: {
+          "border-width": 2,
+          "border-color": "#fff",
+          "z-index": 10
+        }
+      },
+      {
+        selector: "node.highlighted",
+        style: {
+          "border-width": 2.5,
+          "border-color": "#fff",
+          "background-color": "#E8593C",
+          "z-index": 20
+        }
+      },
+      {
+        selector: "node.faded",
+        style: { "opacity": 0.25 }
+      },
+      {
+        selector: "edge",
+        style: {
+          "line-color": "rgba(255,255,255,0.12)",
+          "target-arrow-color": "rgba(255,255,255,0.2)",
+          "target-arrow-shape": "triangle",
+          "curve-style": "bezier",
+          "width": 1,
+          "arrow-scale": 0.8
+        }
+      },
+      {
+        selector: "edge.highlighted",
+        style: {
+          "line-color": "#E8593C",
+          "target-arrow-color": "#E8593C",
+          "opacity": 1,
+          "width": 2,
+          "z-index": 10
+        }
+      },
+      {
+        selector: "edge.faded",
+        style: { "opacity": 0.05 }
+      }
+    ],
+    layout: {
+      name: "breadthfirst",
+      directed: true,
+      padding: 48,
+      spacingFactor: 1.4,
+      animate: true,
+      animationDuration: 600,
+      animationEasing: "ease-out"
+    }
+  })
+
+  // click node to show panel + highlight connections
+  cy.on("tap", "node", function(e) {
+    const node = e.target
+    const connected = node.connectedEdges()
+    const neighborhood = node.closedNeighborhood()
+
+    cy.elements().removeClass("highlighted faded")
+    cy.elements().not(neighborhood).addClass("faded")
+    neighborhood.addClass("highlighted")
+    connected.addClass("highlighted")
+
+    showPanel(node.data())
+  })
+
+  // click background to reset
+  cy.on("tap", function(e) {
+    if (e.target === cy) {
+      cy.elements().removeClass("highlighted faded")
+      closePanel()
+    }
+  })
+}
+
+function showPanel(data) {
+  document.getElementById("panel-id").textContent = data.id
+  document.getElementById("panel-name").textContent = data.name || "—"
+  document.getElementById("panel-hours").textContent = data.hours || "—"
+  document.getElementById("panel-section").textContent = data.section || "—"
+
+  // count prereqs from edges
+  const prereqCount = cy ? cy.edges(`[target = "${data.id}"]`).length : 0
+  document.getElementById("panel-prereqs").textContent = prereqCount > 0 ? `${prereqCount} required` : "none"
+
+  document.getElementById("panel").classList.add("open")
+}
+
+function closePanel() {
+  document.getElementById("panel").classList.remove("open")
+}
+</script>
 </body>
 </html>
